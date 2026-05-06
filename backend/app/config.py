@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     # Admin email – receives new-listing notifications
     ADMIN_EMAIL: str = "maazalisshahid@gmail.com"
 
+    # ── AI trip planner external search ────────────────────────────────────
+    WEB_SEARCH_TIMEOUT_SECONDS: float = 5.0
+    WEB_SEARCH_CACHE_TTL_SECONDS: int = 600
+    WEB_SEARCH_MAX_RESULTS_PER_TYPE: int = 4
+    WEB_SEARCH_USER_AGENT: str = "GBTourismTripPlanner/1.0"
+    SERPAPI_API_KEY: str = ""
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

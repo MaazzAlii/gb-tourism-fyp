@@ -234,6 +234,79 @@ function ServiceCard({
   )
 }
 
+function ExternalSuggestionCard({ item }) {
+  return (
+    <div style={{
+      background: 'var(--bg-card)',
+      borderRadius: 'var(--radius-md)',
+      border: '1px solid var(--border-color)',
+      padding: '14px',
+      boxShadow: 'var(--shadow-sm)'
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '8px'
+      }}>
+        <div style={{
+          fontWeight: 700,
+          fontSize: '0.9rem',
+          color: 'var(--text-primary)'
+        }}>
+          {item.title || item.name}
+        </div>
+        <span style={{
+          fontSize: '0.72rem',
+          fontWeight: 700,
+          color: '#0369a1',
+          background: '#e0f2fe',
+          borderRadius: '999px',
+          padding: '2px 10px'
+        }}>
+          Web
+        </span>
+      </div>
+      <div style={{
+        fontSize: '0.8rem',
+        color: 'var(--text-secondary)',
+        marginBottom: '10px'
+      }}>
+        📍 {item.location || 'Pakistan'}
+      </div>
+      <div style={{
+        fontSize: '0.8rem',
+        color: 'var(--text-secondary)',
+        marginBottom: '12px'
+      }}>
+        {item.description || 'External travel listing suggestion.'}
+      </div>
+      {item.external_url && (
+        <a
+          href={item.external_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            textDecoration: 'none',
+            background: 'var(--accent-light)',
+            color: 'var(--accent)',
+            border: '1px solid var(--accent)',
+            borderRadius: '8px',
+            padding: '7px 12px',
+            fontWeight: 700,
+            fontSize: '0.8rem'
+          }}
+        >
+          ↗ Open Website
+        </a>
+      )}
+    </div>
+  )
+}
+
 function buildItinerary(destination, duration, hotel, transport, activities, hasWebSuggestions) {
   if (duration <= 1) {
     return [{
@@ -1053,7 +1126,7 @@ export default function TripPlanner() {
         )}
 
         {/* No listings found card */}
-        {plan.db_results_found === false && (
+        {plan.fallback_triggered && (
           <div style={{
             background: 'white',
             border: '2px solid #f59e0b',
@@ -1069,31 +1142,41 @@ export default function TripPlanner() {
               fontWeight: 700, fontSize: '1rem',
               color: 'var(--text-primary)', marginBottom: '8px'
             }}>
-              No listings found for {destination} yet
+              No direct listings found in our database
             </div>
             <p style={{
               margin: '0 0 16px', fontSize: '0.875rem',
               color: 'var(--text-secondary)', lineHeight: 1.6
             }}>
-              We're growing our listings across GB. Meanwhile, here's what we
-              know about {destination}:{' '}
-              {plan.destination_info?.extract}
+              {plan.empty_state_message ||
+                `Showing verified web suggestions for ${destination}.`}
             </p>
-            <button
-              onClick={() => navigate('/listings')}
-              style={{
-                padding: '10px 20px',
-                borderRadius: '10px', border: 'none',
-                background:
-                  'linear-gradient(135deg, #1e3a5f, #0ea5e9)',
-                color: 'white', fontWeight: 700,
-                cursor: 'pointer', fontSize: '0.875rem'
-              }}
-            >
-              Browse All Listings →
-            </button>
           </div>
         )}
+
+        {plan.limited_results && (
+          <div style={{
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: 'var(--radius-md)',
+            padding: '10px 14px',
+            marginBottom: '20px',
+            fontSize: '0.85rem',
+            color: '#1e3a8a',
+            fontWeight: 600
+          }}>
+            Limited results available.
+          </div>
+        )}
+
+        <h3 style={{
+          margin: '0 0 12px',
+          fontWeight: 800,
+          fontSize: '1rem',
+          color: 'var(--text-primary)'
+        }}>
+          Available on GB Tourism
+        </h3>
 
         <div style={{ marginBottom: '20px' }}>
           <h3 style={{
@@ -1272,6 +1355,31 @@ export default function TripPlanner() {
             </div>
           )}
         </div>
+
+        {!!plan.web_suggestions?.length && (
+          <div style={{ marginBottom: '24px' }}>
+            <h3 style={{
+              margin: '0 0 12px',
+              fontWeight: 800,
+              fontSize: '1rem',
+              color: 'var(--text-primary)'
+            }}>
+              From Web Suggestions
+            </h3>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+              gap: '12px'
+            }}>
+              {plan.web_suggestions.map((item, idx) => (
+                <ExternalSuggestionCard
+                  key={`${item.external_url || item.name}-${idx}`}
+                  item={item}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Day-by-Day Itinerary */}
         <div style={{ marginBottom: '24px' }}>

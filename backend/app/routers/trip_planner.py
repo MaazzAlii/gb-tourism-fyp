@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.trip_plan import TripPlan
 from app.models.listing import Listing
 from app.dependencies.auth import get_current_user
+from app.services.ai_trip_planner.planner_service import PlannerService
 
 router = APIRouter(
     prefix="/trip-planner", tags=["Trip Planner"]
@@ -98,187 +99,16 @@ async def suggest_trip(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    dest_lower = body.destination.lower()
-    tier = BUDGET_TIERS.get(
-        body.budget_tier, BUDGET_TIERS["standard"]
-    )
-
-    daily_budget = body.total_budget / body.duration_days
-    hotel_budget_per_night = daily_budget * 0.5
-    transport_budget = body.total_budget * 0.2
-    activity_budget = body.total_budget * 0.3
-
-    hotel_budget_per_night = min(
-        hotel_budget_per_night, tier["hotel_max"]
-    )
-
-    hotels = db.query(Listing).filter(
-        Listing.service_type == "hotel"
-    ).all()
-    matched_hotels = [
-        h for h in hotels
-        if dest_lower in (h.location or "").lower()
-        or (h.location or "").lower() in dest_lower
-        or any(
-            word in (h.location or "").lower()
-            for word in dest_lower.split()
-            if len(word) > 3
-        )
-    ]
-    _has_dest_hotels = len(matched_hotels) > 0
-
-    affordable_hotels = [
-        h for h in matched_hotels
-        if (h.price_per_night or 0) <= hotel_budget_per_night
-    ]
-    if not affordable_hotels:
-        affordable_hotels = sorted(
-            matched_hotels,
-            key=lambda h: h.price_per_night or 0
-        )
-
-    suggested_hotel = (
-        max(affordable_hotels,
-            key=lambda h: h.price_per_night or 0)
-        if affordable_hotels else None
-    )
-
-    transports = db.query(Listing).filter(
-        Listing.service_type.in_([
-            "transport", "car_rental",
-            "bike_rental", "jeep_safari",
-        ])
-    ).all()
-    matched_transport = [
-        t for t in transports
-        if dest_lower in (t.location or "").lower()
-        or (t.location or "").lower() in dest_lower
-        or any(
-            word in (t.location or "").lower()
-            for word in dest_lower.split()
-            if len(word) > 3
-        )
-    ]
-    affordable_transport = [
-        t for t in matched_transport
-        if (t.price_per_night or 0) <= transport_budget
-    ]
-    if not affordable_transport:
-        affordable_transport = sorted(
-            matched_transport,
-            key=lambda t: t.price_per_night or 0
-        )
-
-    suggested_transport = (
-        affordable_transport[0]
-        if affordable_transport else None
-    )
-
-    activities_all = db.query(Listing).filter(
-        Listing.service_type.in_([
-            "tour", "activity", "horse_riding",
-            "guide", "boat_trip", "camping",
-        ])
-    ).all()
-    matched_activities = [
-        a for a in activities_all
-        if dest_lower in (a.location or "").lower()
-        or (a.location or "").lower() in dest_lower
-        or any(
-            word in (a.location or "").lower()
-            for word in dest_lower.split()
-            if len(word) > 3
-        )
-    ]
-    affordable_activities = [
-        a for a in matched_activities
-        if (a.price_per_night or 0) <= activity_budget / 2
-    ]
-    suggested_activities = affordable_activities[:3]
-
-    hotel_cost = (
-        (suggested_hotel.price_per_night or 0)
-        * body.duration_days
-        if suggested_hotel else 0
-    )
-    transport_cost = (
-        suggested_transport.price_per_night
-        if suggested_transport else 0
-    )
-    activity_cost = sum(
-        a.price_per_night or 0
-        for a in suggested_activities
-    )
-    estimated_cost = (
-        hotel_cost + transport_cost + activity_cost
-    )
-
-    alt_hotels = [
-        h for h in matched_hotels
-        if h.id != (
-            suggested_hotel.id
-            if suggested_hotel else None
-        )
-    ][:4]
-
-    alt_transports = [
-        t for t in matched_transport
-        if t.id != (
-            suggested_transport.id
-            if suggested_transport else None
-        )
-    ][:3]
-
-    alt_activities = [
-        a for a in matched_activities
-        if a.id not in [
-            x.id for x in suggested_activities
-        ]
-    ][:4]
-
     dest_info = await get_destination_info(body.destination)
-
-    return {
-        "destination": body.destination,
-        "duration_days": body.duration_days,
-        "budget_tier": body.budget_tier,
-        "total_budget": body.total_budget,
-        "estimated_cost": estimated_cost,
-        "budget_remaining": (
-            body.total_budget - estimated_cost
-        ),
-        "db_results_found": _has_dest_hotels,
-        "destination_info": dest_info,
-        "hotel": get_listing_dict(
-            suggested_hotel, body.duration_days
-        ),
-        "transport": get_listing_dict(
-            suggested_transport, 1
-        ),
-        "activities": [
-            get_listing_dict(a, 1)
-            for a in suggested_activities
-        ],
-        "alternatives": {
-            "hotels": [
-                get_listing_dict(h, body.duration_days)
-                for h in alt_hotels
-            ],
-            "transports": [
-                get_listing_dict(t, 1)
-                for t in alt_transports
-            ],
-            "activities": [
-                get_listing_dict(a, 1)
-                for a in alt_activities
-            ],
-        },
-        "breakdown": {
-            "hotel": hotel_cost,
-            "transport": transport_cost,
-            "activities": activity_cost,
-        },
-    }
+    service = PlannerService()
+    return await service.generate_plan(
+        db=db,
+        destination=body.destination,
+        duration_days=body.duration_days,
+        budget_tier=body.budget_tier,
+        total_budget=body.total_budget,
+        destination_info=dest_info,
+    )
 
 
 @router.post("/save")
